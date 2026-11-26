@@ -1,0 +1,56 @@
+name: Build PhoneRunner
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build UI test runner
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project PhoneRunner.xcodeproj \
+            -scheme PhoneRunnerUITests \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tail -60
+
+      - name: List products
+        if: always()
+        run: |
+          echo "=== Products ==="
+          find build/Build/Products -maxdepth 3 -name "*.app" -o -maxdepth 3 -name "*.xctestrun" -o -maxdepth 3 -name "*.xctest" | sort
+          echo "=== Runner bundle id ==="
+          for p in $(find build/Build/Products -maxdepth 3 -name "*-Runner.app"); do
+            /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$p/Info.plist" || true
+          done
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoneRunner-xctrunner
+          path: |
+            build/Build/Products/**/*.app
+            build/Build/Products/**/*.xctestrun
+          if-no-files-found: warn
