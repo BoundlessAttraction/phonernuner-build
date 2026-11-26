@@ -7,13 +7,27 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
-    timeout-minutes: 30
+    runs-on: macos-26
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: Show available Xcodes
+        run: |
+          ls /Applications | grep -i '^Xcode' || true
+          xcodebuild -version
+
+      - name: Select Xcode 26 if present
+        run: |
+          PICK=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$PICK" ]; then
+            echo "Selecting $PICK"
+            sudo xcode-select -s "$PICK"
+          else
+            echo "No Xcode 26 found, keeping default"
+          fi
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos || true
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -40,9 +54,11 @@ jobs:
         run: |
           echo "=== Products ==="
           find build/Build/Products -maxdepth 3 -name "*.app" -o -maxdepth 3 -name "*.xctestrun" -o -maxdepth 3 -name "*.xctest" | sort
-          echo "=== Runner bundle id ==="
+          echo "=== Runner info ==="
           for p in $(find build/Build/Products -maxdepth 3 -name "*-Runner.app"); do
             /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$p/Info.plist" || true
+            /usr/libexec/PlistBuddy -c "Print :DTSDKName" "$p/Info.plist" || true
+            /usr/libexec/PlistBuddy -c "Print :DTPlatformVersion" "$p/Info.plist" || true
           done
 
       - name: Upload artifact
